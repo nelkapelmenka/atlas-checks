@@ -82,6 +82,9 @@
       "tags":"highway,landuse"
     }
   },
+  "BadHighwayLinkCheck": {
+
+  },
   "BigNodeBadDataCheck": {
     "max.number.paths.threshold": 25,
     "max.number.junction.edges.threshold": 2,
