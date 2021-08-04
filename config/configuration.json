@@ -82,6 +82,15 @@
     }
   },
   "BadHighwayLinkCheck": {
+    "check": {
+      "highwayLinkTypes": ["motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link"],
+      "highwayTypesPriorityList": ["motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential"],
+      "highwayLinkToHighwayTypeCorrespondence": [["motorway" ," motorway_link"],["trunk", "trunk_link"],
+        ["primary", "primary_link"], ["secondary", "secondary_link"], ["tertiary", "tertiary_link"]]
+    },
+    "description": {
+
+    }
 
   },
   "BigNodeBadDataCheck": {

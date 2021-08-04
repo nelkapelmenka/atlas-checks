@@ -16,6 +16,10 @@ public class BadHighwayLinkCheck extends BaseCheck<Long>
 {
 
     private static final long serialVersionUID = 6376650158676214570L;
+    private static final String HIGHWAY_LINK_IS_NAMED_IMPROPERLY_INSTRUCTIONS = "";
+    private static final String HIGHWAY_LINK_IS_TOO_LONG_INSTRUCTIONS = "";
+    private static final String HIGHWAY_LINK_IS_TOO_LONG_AND_NAMED_IMPROPERLY = "";
+
 
     /**
      * The default constructor that must be supplied. The Atlas Checks framework will generate the
