@@ -1,10 +1,17 @@
 package org.openstreetmap.atlas.checks.validation.tag;
 
 import java.util.Optional;
+import java.util.List;
+import java.util.Map;
+import java.util.Arrays;
+import java.util.Set;
 
 import org.openstreetmap.atlas.checks.base.BaseCheck;
 import org.openstreetmap.atlas.checks.flag.CheckFlag;
 import org.openstreetmap.atlas.geography.atlas.items.AtlasObject;
+import org.openstreetmap.atlas.geography.atlas.items.Edge;
+import org.openstreetmap.atlas.geography.atlas.walker.OsmWayWalker;
+import org.openstreetmap.atlas.tags.HighwayTag;
 import org.openstreetmap.atlas.utilities.configuration.Configuration;
 
 /**
@@ -14,11 +21,25 @@ import org.openstreetmap.atlas.utilities.configuration.Configuration;
  */
 public class BadHighwayLinkCheck extends BaseCheck<Long>
 {
-
     private static final long serialVersionUID = 6376650158676214570L;
+
+    private static final List<String> HIGHWAY_LINKS_DEFAULT = Arrays.asList("motorway_link", "trunk_link",
+            "primary_link", "secondary_link", "tertiary_link");
+    private static final List<String> HIGHWAY_TYPES_PRIORITY_DEFAULT = Arrays.asList("motorway", "trunk", "primary",
+            "secondary", "tertiary", "unclassified", "residential");
+    private static final Map<String, String> HIGHWAY_TYPES_AND_LINKS_CORRESPONDENCE_DEFAULT = Map.of("motorway",
+            "motorway_link", "trunk", "trunk_link", "primary", "primary_link", "secondary",
+            "secondary_link", "tertiary", "tertiary_link");
+
     private static final String HIGHWAY_LINK_IS_NAMED_IMPROPERLY_INSTRUCTIONS = "";
     private static final String HIGHWAY_LINK_IS_TOO_LONG_INSTRUCTIONS = "";
     private static final String HIGHWAY_LINK_IS_TOO_LONG_AND_NAMED_IMPROPERLY = "";
+    private static final List<String> FALLBACK_INSTRUCTIONS = Arrays.asList(HIGHWAY_LINK_IS_NAMED_IMPROPERLY_INSTRUCTIONS,
+            HIGHWAY_LINK_IS_TOO_LONG_INSTRUCTIONS, HIGHWAY_LINK_IS_TOO_LONG_AND_NAMED_IMPROPERLY);
+
+    private final List<String> highwayLinksTypesList;
+    private final List<String> highwayTypesPriorityList;
+    private final Map<String, String> highwayTypesAndLinksCorrespondence;
 
 
     /**
@@ -32,10 +53,14 @@ public class BadHighwayLinkCheck extends BaseCheck<Long>
     public BadHighwayLinkCheck(final Configuration configuration)
     {
         super(configuration);
-        // any internal variables can be set here from configuration
-        // eg. MAX_LENGTH could be defined as "public static final double MAX_LENGTH = 100;"
-        // this.maxLength = configurationValue(configuration, "length.max", MAX_LENGTH,
-        // Distance::meters);
+
+        this.highwayLinksTypesList = this.configurationValue(configuration,
+                "highwayTypes.highwayLinkTypes", HIGHWAY_LINKS_DEFAULT);
+        this.highwayTypesPriorityList = this.configurationValue(configuration,
+                "highwayTypes.highwayTypesPriorityList", HIGHWAY_TYPES_PRIORITY_DEFAULT);
+        this.highwayTypesAndLinksCorrespondence = this.configurationValue(configuration,
+                "highwayTypes.highwayLinkToHighwayTypeCorrespondence", HIGHWAY_TYPES_AND_LINKS_CORRESPONDENCE_DEFAULT);
+
     }
 
     /**
@@ -48,8 +73,19 @@ public class BadHighwayLinkCheck extends BaseCheck<Long>
     @Override
     public boolean validCheckForObject(final AtlasObject object)
     {
-        // by default we will assume all objects as valid
-        return true;
+        return !this.isFlagged(object.getOsmIdentifier())
+                && (object instanceof Edge && ((Edge) object).isMainEdge())
+                && highwayIsLink(object);
+    }
+
+    @Override
+    protected CheckFlag createFlag(final AtlasObject object, final String instruction)
+    {
+        if (object instanceof Edge)
+        {
+            return super.createFlag(new OsmWayWalker((Edge) object).collectEdges(), instruction);
+        }
+        return super.createFlag(object, instruction);
     }
 
     /**
@@ -62,10 +98,36 @@ public class BadHighwayLinkCheck extends BaseCheck<Long>
     @Override
     protected Optional<CheckFlag> flag(final AtlasObject object)
     {
-        // insert algorithmic check to see whether object needs to be flagged.
-        // Example of flagging an object
-        // return Optional.of(this.createFlag(object, "Instruction how to fix issue or reason behind
-        // flagging the object");
+        this.markAsFlagged(object.getOsmIdentifier());
+        if (highwayLinkLength(object) > 1000.00)
+        {
+            return Optional.of(this.createFlag(object, this.getLocalizedInstruction(0)));
+        }
         return Optional.empty();
+    }
+
+    @Override
+    protected List<String> getFallbackInstructions()
+    {
+        return FALLBACK_INSTRUCTIONS;
+    }
+
+    private boolean highwayIsLink(final AtlasObject object)
+    {
+        final String highwayTag = object.tag(HighwayTag.KEY);
+        if (highwayTag != null && this.highwayLinksTypesList.contains(highwayTag.toLowerCase())){
+            return true;
+        }
+        return false;
+    }
+
+    private double highwayLinkLength(final AtlasObject object) {
+        double highwayLength = 0.0;
+        final Set<Edge> edges = new OsmWayWalker((Edge) object).collectEdges();
+        for(Edge edge : edges){
+            highwayLength = highwayLength + edge.length().asMeters();
+        }
+
+        return highwayLength;
     }
 }
