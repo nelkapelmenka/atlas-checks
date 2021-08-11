@@ -1,10 +1,7 @@
 package org.openstreetmap.atlas.checks.validation.tag;
 
-import java.util.Optional;
-import java.util.List;
-import java.util.Map;
-import java.util.Arrays;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import org.openstreetmap.atlas.checks.base.BaseCheck;
 import org.openstreetmap.atlas.checks.flag.CheckFlag;
@@ -99,6 +96,52 @@ public class BadHighwayLinkCheck extends BaseCheck<Long>
     protected Optional<CheckFlag> flag(final AtlasObject object)
     {
         this.markAsFlagged(object.getOsmIdentifier());
+
+        final Edge edgeInQuestion = ((Edge) object).getMainEdge();
+        final List<Edge> edges = new OsmWayWalker(edgeInQuestion).collectEdges().stream().sorted().collect(Collectors.toList());
+        final List<Edge> inEdges = edges.get(0).start().connectedEdges().stream()
+                .filter(inEdge -> inEdge.isMainEdge()
+                        && inEdge.getOsmIdentifier() != edgeInQuestion.getOsmIdentifier()
+                        && !inEdge.tag(HighwayTag.KEY).contains("_link"))
+                .collect(Collectors.toList());
+
+        List<String> inEdgesHighwayTags = inEdges.stream().map(edge -> edge.tag(HighwayTag.KEY)).collect(Collectors.toList());
+
+        List<Integer> inEdgesHighwayIndexes = inEdgesHighwayTags.stream().map(tag -> this.highwayTypesPriorityList.indexOf(tag)).collect(Collectors.toList());
+
+        Collections.sort(inEdgesHighwayIndexes);
+
+        String highestPriorityHighway = this.highwayTypesPriorityList.get(inEdgesHighwayIndexes.get(0));
+
+
+
+
+        final List<Edge> outEdges = edges.get(edges.size() - 1).end().connectedEdges().stream()
+                .filter(outEdge -> outEdge.isMainEdge()
+                        && outEdge.getOsmIdentifier() != edgeInQuestion.getOsmIdentifier()
+                        && !outEdge.tag(HighwayTag.KEY).contains("_link"))
+                .collect(Collectors.toList());
+
+        String outHighestPriority = highestPriorityHighwayConnectingToTheLink(outEdges);
+//
+//        final List<String> outEdgesHighwayTags = outEdges.stream().map(edge -> edge.tag(HighwayTag.KEY)).collect(Collectors.toList());
+//        final List<Integer> highwayIndeces = outEdgesHighwayTags.stream().map(tag -> this.highwayTypesPriorityList.indexOf(tag)).collect(Collectors.toList());
+//
+//        int lowestIndex = 100;
+//        for (int ind : highwayIndeces)
+//        {
+//            if (ind < lowestIndex) {
+//                lowestIndex = ind;
+//            }
+//        }
+//
+//        final String highestPriorityHighway = outEdgesHighwayTags.get(lowestIndex);
+
+
+
+
+
+
         if (highwayLinkLength(object) > 1000.00)
         {
             return Optional.of(this.createFlag(object, this.getLocalizedInstruction(0)));
@@ -129,5 +172,47 @@ public class BadHighwayLinkCheck extends BaseCheck<Long>
         }
 
         return highwayLength;
+    }
+
+    private List<String> highwayLinkConnectionsCheck(final AtlasObject object)
+    {
+
+        return null;
+    }
+
+    private String highwayStartingNodeHighwayConnections(final List<Edge> allEdgesOfWay, final Edge edgeAnalysed)
+    {
+        final List<Edge> inEdges = allEdgesOfWay.get(0).start().connectedEdges().stream()
+                .filter(inEdge -> inEdge.isMainEdge()
+                        && inEdge.getOsmIdentifier() != edgeAnalysed.getOsmIdentifier()
+                        && !inEdge.tag(HighwayTag.KEY).contains("_link"))
+                .collect(Collectors.toList());
+
+        return null;
+    }
+
+    private String highwayEndingNodeHighwayConnections(final List<Edge> allEdgesOfWay)
+    {
+        return null;
+    }
+
+    private String highestPriorityHighwayConnectingToTheLink(final List<Edge> boundaryEdgesToCheckTheConnections)
+    {
+        if(boundaryEdgesToCheckTheConnections.size() > 0)
+        {
+            final List<String> highwayTagsOfConnectingEdges = boundaryEdgesToCheckTheConnections.stream().
+                    map(connectingEdge -> connectingEdge.tag(HighwayTag.KEY)).collect(Collectors.toList());
+
+            List<Integer> connectingEdgesHighwayPriorityIndex = highwayTagsOfConnectingEdges.stream()
+                    .map(tag -> this.highwayTypesPriorityList.indexOf(tag.toLowerCase())).collect(Collectors.toList());
+
+            Collections.sort(connectingEdgesHighwayPriorityIndex);
+
+            final String highestPriorityHighwayTag = this.highwayTypesPriorityList.get(connectingEdgesHighwayPriorityIndex.get(0));
+
+            return highestPriorityHighwayTag;
+        }
+
+        return null;
     }
 }

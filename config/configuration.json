@@ -82,7 +82,7 @@
     }
   },
   "BadHighwayLinkCheck": {
-    "enabled": true,
+    "enabled": false,
     "highwayTypes": {
       "highwayLinkTypes": ["motorway_link", "trunk_link", "primary_link", "secondary_link", "tertiary_link"],
       "highwayTypesPriorityList": ["motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential"],
@@ -860,6 +860,7 @@
     }
   },
   "RoadLinkCheck": {
+    "enabled": true,
     "length.maximum.miles": 1.0,
     "challenge": {
       "description": "Verify that one end or the other is a fork to/from a road of the same class, that is not a _link",
