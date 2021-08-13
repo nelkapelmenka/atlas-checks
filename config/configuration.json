@@ -861,7 +861,7 @@
   },
   "RoadLinkCheck": {
     "enabled": true,
-    "length.maximum.miles": 1.0,
+    "length.maximum.meters": 1000.0,
     "challenge": {
       "description": "Verify that one end or the other is a fork to/from a road of the same class, that is not a _link",
       "blurb": "Check for invalid classes in connected ways.",
