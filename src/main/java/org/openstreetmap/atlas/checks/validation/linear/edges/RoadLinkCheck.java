@@ -20,14 +20,14 @@ import org.openstreetmap.atlas.utilities.scalars.Distance;
 public class RoadLinkCheck extends BaseCheck<Long>
 {
 
-    private final String noConnectionsWithLinkEquivalent = "The link has no connections on either end that have link equivalent";
-    private final String noConnectionOnEitherSide = "The link has no proper highway connection on either side";
+    private final String noConnectionsWithLinkEquivalent = "has no connections on either end that have link equivalent";
+    private final String noConnectionOnBothSides = "has no proper highway connection on either side";
     public static final double DISTANCE_METERS_DEFAULT = 1000;
-    private static final String INVALID_LINK_DISTANCE_INSTRUCTION = "Invalid link, distance, {0}, greater than maximum, {1}.";
+    private static final String INVALID_LINK_DISTANCE_INSTRUCTION = "Invalid link, distance {0} km, greater than maximum, {1}.";
     private static final String NO_SAME_CLASSIFICATION_INSTRUCTION =
             "The link has wrong classification based on the surrounding highways and the classification priorities. A suggested highway tag would be {0}.";
     private static final String LINK_TOO_LONG_AND_CLASSIFICATION_WRONG_INSTRUCTION =
-            "The link, distance, {0} is greater than max {1} AND it has the wrong classification. Check if the highway type is still a link and if so, a suggested link highway tag is {2}";
+            "The link, distance {0} km is greater than max {1} AND it has the wrong classification. Check if the highway type is still a link and if so, change classification.";
     private static final String LINK_HAS_NO_CONNECTION_INSTRUCTION =
             "The link has no connection to highway on one of the sides. Generally highway links have an entrance and an exist, please confirm if this is a link.";
     private static final String LINK_HAS_NO_CONNECTIONS_WITH_LINK_EQUIVALENT_INSTRUCTION =
@@ -49,7 +49,8 @@ public class RoadLinkCheck extends BaseCheck<Long>
     public boolean validCheckForObject(final AtlasObject object)
     {
         return object instanceof Edge && ((Edge) object).highwayTag().isLink()
-                && ((Edge) object).isMainEdge() && !this.isFlagged(object.getOsmIdentifier());
+                && ((Edge) object).isMainEdge() && !this.isFlagged(object.getOsmIdentifier())
+                && object.getOsmIdentifier() == 435181481;
     }
 
     @Override
@@ -71,19 +72,17 @@ public class RoadLinkCheck extends BaseCheck<Long>
         final Distance linkLength = linkLength(object);
         final String suggestedLinkName = linkProperConnectionNameSuggestion(object);
 
-        if(!(linkLength == null)
-                && linkLength.isGreaterThan(this.maximumLength)
+        if(linkLength.isGreaterThan(this.maximumLength)
                 && !(suggestedLinkName == null)) {
-            return Optional.of(this.createFlag(object, this.getLocalizedInstruction(2, linkLength.asMeters(), this.maximumLength, suggestedLinkName)));
+            return Optional.of(this.createFlag(object, this.getLocalizedInstruction(2, linkLength.asKilometers(), this.maximumLength)));
         }
 
-        else if(!(linkLength == null)
-                && linkLength.isGreaterThan(this.maximumLength))
+        else if(linkLength.isGreaterThan(this.maximumLength))
         {
-            return Optional.of(this.createFlag(object, this.getLocalizedInstruction(0, linkLength.asMeters(), this.maximumLength)));
+            return Optional.of(this.createFlag(object, this.getLocalizedInstruction(0, linkLength.asKilometers(), this.maximumLength)));
         }
 
-        else if(!(suggestedLinkName == null) && suggestedLinkName == this.noConnectionOnEitherSide)
+        else if(!(suggestedLinkName == null) && suggestedLinkName == this.noConnectionOnBothSides)
         {
             return Optional.of(this.createFlag(object, this.getLocalizedInstruction(3)));
         }
@@ -114,11 +113,11 @@ public class RoadLinkCheck extends BaseCheck<Long>
      */
     private Distance linkLength(final AtlasObject object)
     {
-        Distance highwayLength = Distance.ZERO;
+        Distance highwayLength = Distance.meters(0);
         final Set<Edge> highwayLink = new OsmWayWalker((Edge) object).collectEdges();
         for (Edge edge : highwayLink)
         {
-            highwayLength.add(edge.length());
+            highwayLength = highwayLength.add(edge.length());
         }
 
         return highwayLength;
@@ -135,12 +134,13 @@ public class RoadLinkCheck extends BaseCheck<Long>
 
         String suggestedLinkName = null;
 
-        if (startingEdgeTag == null || endingEdgeTag == null)
+        if (startingEdgeTag == HighwayTag.NO && endingEdgeTag == HighwayTag.NO)
         {
-            suggestedLinkName = this.noConnectionOnEitherSide;
+            suggestedLinkName = this.noConnectionOnBothSides;
         }
 
-        else if(!startingEdgeTag.canHaveLink() && !endingEdgeTag.canHaveLink())
+        else if((!startingEdgeTag.canHaveLink() && startingEdgeTag.isLink())
+                && (!endingEdgeTag.canHaveLink() && endingEdgeTag.isLink()))
         {
             suggestedLinkName = this.noConnectionsWithLinkEquivalent;
         }
@@ -148,17 +148,38 @@ public class RoadLinkCheck extends BaseCheck<Long>
         else if((startingEdgeTag.isOfEqualClassification(endingEdgeTag))
                 && !startingEdgeTag.isOfEqualClassification(currentEdgeTag))
         {
-            suggestedLinkName = startingEdgeTag.getLinkFromHighway().get().toString();
+            if (startingEdgeTag.isLink())
+            {
+                suggestedLinkName = startingEdgeTag.getTagValue();
+            }
+            else
+            {
+                suggestedLinkName = startingEdgeTag.getLinkFromHighway().get().toString();
+            }
         }
-        else if((startingEdgeTag.isMoreImportantThan(endingEdgeTag))
+        else if(startingEdgeTag.isMoreImportantThan(endingEdgeTag)
                 && !startingEdgeTag.isOfEqualClassification(currentEdgeTag))
         {
-            suggestedLinkName = startingEdgeTag.getLinkFromHighway().get().toString();
+            if (startingEdgeTag.isLink())
+            {
+                suggestedLinkName = startingEdgeTag.getTagValue();
+            }
+            else
+            {
+                suggestedLinkName = startingEdgeTag.getLinkFromHighway().get().toString();
+            }
         }
         else if(endingEdgeTag.isMoreImportantThan(startingEdgeTag)
                 && !endingEdgeTag.isOfEqualClassification(currentEdgeTag))
         {
-            suggestedLinkName = endingEdgeTag.getLinkFromHighway().get().toString();
+            if (endingEdgeTag.isLink())
+            {
+                suggestedLinkName = endingEdgeTag.getTagValue();
+            }
+            else
+            {
+                suggestedLinkName = endingEdgeTag.getLinkFromHighway().get().toString();
+            }
         }
 
         return suggestedLinkName;
@@ -166,14 +187,17 @@ public class RoadLinkCheck extends BaseCheck<Long>
 
     private HighwayTag startingNodeHighwayConnection(final List<Edge> allEdgesOfLink, final Edge currentEdge)
     {
-        final List<Edge> startConnections = allEdgesOfLink.get(0).start().connectedEdges().stream()
+        List<Edge> startConnections = allEdgesOfLink.get(0).start().connectedEdges().stream()
                 .filter(connection -> connection.isMainEdge()
                         && connection.getOsmIdentifier() != currentEdge.getOsmIdentifier()
                         && !connection.highwayTag().isLink())
                 .collect(Collectors.toList());
 
         if (startConnections.isEmpty()){
-            return null;
+            startConnections = allEdgesOfLink.get(0).start().connectedEdges().stream()
+                    .filter(connection -> connection.isMainEdge()
+                            && connection.getOsmIdentifier() != currentEdge.getOsmIdentifier())
+                    .collect(Collectors.toList());
         }
 
         HighwayTag startHighestPriorityTag = HighwayTag.NO;
@@ -190,7 +214,7 @@ public class RoadLinkCheck extends BaseCheck<Long>
 
     private HighwayTag endingNodeHighwayConnection(final List<Edge> allEdgesOfLink, final Edge currentEdge)
     {
-        final List<Edge> endConnections = allEdgesOfLink.get(0).end().connectedEdges().stream()
+        List<Edge> endConnections = allEdgesOfLink.get(allEdgesOfLink.size()-1).end().connectedEdges().stream()
                 .filter(connection -> connection.isMainEdge()
                         && connection.getOsmIdentifier() != currentEdge.getOsmIdentifier()
                         && !connection.highwayTag().isLink())
@@ -198,7 +222,10 @@ public class RoadLinkCheck extends BaseCheck<Long>
 
         if(endConnections.isEmpty())
         {
-            return null;
+            endConnections = allEdgesOfLink.get(allEdgesOfLink.size()-1).end().connectedEdges().stream()
+                    .filter(connection -> connection.isMainEdge()
+                            && connection.getOsmIdentifier() != currentEdge.getOsmIdentifier())
+                    .collect(Collectors.toList());
         }
 
         HighwayTag endHighestPriorityTag = HighwayTag.NO;
