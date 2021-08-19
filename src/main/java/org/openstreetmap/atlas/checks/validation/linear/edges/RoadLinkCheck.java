@@ -5,11 +5,13 @@ import java.util.stream.Collectors;
 
 import org.openstreetmap.atlas.checks.base.BaseCheck;
 import org.openstreetmap.atlas.checks.flag.CheckFlag;
+import org.openstreetmap.atlas.geography.Heading;
 import org.openstreetmap.atlas.geography.atlas.items.AtlasObject;
 import org.openstreetmap.atlas.geography.atlas.items.Edge;
 import org.openstreetmap.atlas.geography.atlas.walker.OsmWayWalker;
 import org.openstreetmap.atlas.tags.HighwayTag;
 import org.openstreetmap.atlas.utilities.configuration.Configuration;
+import org.openstreetmap.atlas.utilities.scalars.Angle;
 import org.openstreetmap.atlas.utilities.scalars.Distance;
 
 /**
@@ -49,8 +51,7 @@ public class RoadLinkCheck extends BaseCheck<Long>
     public boolean validCheckForObject(final AtlasObject object)
     {
         return object instanceof Edge && ((Edge) object).highwayTag().isLink()
-                && ((Edge) object).isMainEdge() && !this.isFlagged(object.getOsmIdentifier())
-                && object.getOsmIdentifier() == 435181481;
+                && ((Edge) object).isMainEdge() && !this.isFlagged(object.getOsmIdentifier());
     }
 
     @Override
@@ -73,7 +74,7 @@ public class RoadLinkCheck extends BaseCheck<Long>
         final String suggestedLinkName = linkProperConnectionNameSuggestion(object);
 
         if(linkLength.isGreaterThan(this.maximumLength)
-                && !(suggestedLinkName == null)) {
+                && suggestedLinkName != null) {
             return Optional.of(this.createFlag(object, this.getLocalizedInstruction(2, linkLength.asKilometers(), this.maximumLength)));
         }
 
@@ -82,17 +83,17 @@ public class RoadLinkCheck extends BaseCheck<Long>
             return Optional.of(this.createFlag(object, this.getLocalizedInstruction(0, linkLength.asKilometers(), this.maximumLength)));
         }
 
-        else if(!(suggestedLinkName == null) && suggestedLinkName == this.noConnectionOnBothSides)
+        else if((suggestedLinkName != null) && suggestedLinkName.equals(this.noConnectionOnBothSides))
         {
             return Optional.of(this.createFlag(object, this.getLocalizedInstruction(3)));
         }
 
-        else if(suggestedLinkName != null && suggestedLinkName == this.noConnectionsWithLinkEquivalent)
+        else if((suggestedLinkName != null) && suggestedLinkName.equals(this.noConnectionsWithLinkEquivalent))
         {
             return Optional.of(this.createFlag(object, this.getLocalizedInstruction(4)));
         }
 
-        else if(!(suggestedLinkName == null))
+        else if(suggestedLinkName != null)
         {
             return Optional.of(this.createFlag(object, this.getLocalizedInstruction(1, suggestedLinkName.toLowerCase())));
         }
@@ -139,8 +140,8 @@ public class RoadLinkCheck extends BaseCheck<Long>
             suggestedLinkName = this.noConnectionOnBothSides;
         }
 
-        else if((!startingEdgeTag.canHaveLink() && startingEdgeTag.isLink())
-                && (!endingEdgeTag.canHaveLink() && endingEdgeTag.isLink()))
+        else if((!startingEdgeTag.canHaveLink() && !startingEdgeTag.isLink())
+                && (!endingEdgeTag.canHaveLink() && !endingEdgeTag.isLink()))
         {
             suggestedLinkName = this.noConnectionsWithLinkEquivalent;
         }
@@ -187,56 +188,115 @@ public class RoadLinkCheck extends BaseCheck<Long>
 
     private HighwayTag startingNodeHighwayConnection(final List<Edge> allEdgesOfLink, final Edge currentEdge)
     {
-        List<Edge> startConnections = allEdgesOfLink.get(0).start().connectedEdges().stream()
-                .filter(connection -> connection.isMainEdge()
-                        && connection.getOsmIdentifier() != currentEdge.getOsmIdentifier()
-                        && !connection.highwayTag().isLink())
+        List<Edge> startConnections = allEdgesOfLink.get(0).start().inEdges().stream()
+                .filter(connection -> connection.getOsmIdentifier() != currentEdge.getOsmIdentifier())
                 .collect(Collectors.toList());
 
-        if (startConnections.isEmpty()){
-            startConnections = allEdgesOfLink.get(0).start().connectedEdges().stream()
-                    .filter(connection -> connection.isMainEdge()
-                            && connection.getOsmIdentifier() != currentEdge.getOsmIdentifier())
-                    .collect(Collectors.toList());
-        }
+//        if (startConnections.isEmpty()){
+//            startConnections = allEdgesOfLink.get(0).start().inEdges().stream()
+//                    .filter(connection -> connection.isMainEdge()
+//                            && connection.getOsmIdentifier() != currentEdge.getOsmIdentifier())
+//                    .collect(Collectors.toList());
+//        }
 
-        HighwayTag startHighestPriorityTag = HighwayTag.NO;
-        for (Edge startConnectionsEdge : startConnections)
+        final Angle angleDifferenceSmallest = Angle.degrees(180);
+        Angle smallestAngle;
+        int indexOfClosestAngles = 0;
+
+        if (startConnections.size() > 1)
         {
-            if(startHighestPriorityTag.isLessImportantThan(startConnectionsEdge.highwayTag()))
-            {
-                startHighestPriorityTag = startConnectionsEdge.highwayTag();
-            }
-        }
+            List<Angle> startConnectionAngles = startConnections.stream()
+                    .map(connection -> angleDifferenceSmallest.difference(angleDifferenceBetweenEdges(currentEdge, connection)))
+                    .collect(Collectors.toList());
 
-        return startHighestPriorityTag;
+
+            for (Angle angle : startConnectionAngles)
+            {
+                if (angle.isLessThan(angleDifferenceSmallest) && angle.isGreaterThan(Angle.degrees(-5)))
+                {
+                    smallestAngle = angle;
+                    indexOfClosestAngles = startConnectionAngles.indexOf(angle);
+                }
+            }
+
+
+        }
+        Edge startConnection = startConnections.get(indexOfClosestAngles);
+
+//        HighwayTag startHighestPriorityTag = HighwayTag.NO;
+//        for (Edge startConnectionsEdge : startConnections)
+//        {
+//            if(startHighestPriorityTag.isLessImportantThan(startConnectionsEdge.highwayTag()))
+//            {
+//                startHighestPriorityTag = startConnectionsEdge.highwayTag();
+//            }
+//        }
+
+        return startConnection.highwayTag();
     }
 
     private HighwayTag endingNodeHighwayConnection(final List<Edge> allEdgesOfLink, final Edge currentEdge)
     {
-        List<Edge> endConnections = allEdgesOfLink.get(allEdgesOfLink.size()-1).end().connectedEdges().stream()
-                .filter(connection -> connection.isMainEdge()
-                        && connection.getOsmIdentifier() != currentEdge.getOsmIdentifier()
-                        && !connection.highwayTag().isLink())
+        List<Edge> endConnections = allEdgesOfLink.get(allEdgesOfLink.size()-1).end().outEdges().stream()
+                .filter(connection ->                                       connection.getOsmIdentifier() != currentEdge.getOsmIdentifier())
                 .collect(Collectors.toList());
 
-        if(endConnections.isEmpty())
-        {
-            endConnections = allEdgesOfLink.get(allEdgesOfLink.size()-1).end().connectedEdges().stream()
-                    .filter(connection -> connection.isMainEdge()
-                            && connection.getOsmIdentifier() != currentEdge.getOsmIdentifier())
-                    .collect(Collectors.toList());
-        }
+//        if(endConnections.isEmpty())
+//        {
+//            endConnections = allEdgesOfLink.get(allEdgesOfLink.size()-1).end().outEdges().stream()
+//                    .filter(connection -> connection.isMainEdge()
+//                            && connection.getOsmIdentifier() != currentEdge.getOsmIdentifier())
+//                    .collect(Collectors.toList());
+//        }
 
-        HighwayTag endHighestPriorityTag = HighwayTag.NO;
-        for (Edge endConnectionsEdge : endConnections)
+
+        final Angle angleDifferenceSmallest = Angle.degrees(180);
+        Angle smallestAngle = Angle.degrees(360);
+        int indexOfClosestAngles = 0;
+
+        if (endConnections.size() > 1)
         {
-            if(endHighestPriorityTag.isLessImportantThan(endConnectionsEdge.highwayTag()))
+            List<Angle> endConnectionAngles = endConnections.stream()
+                    .map(connection -> angleDifferenceSmallest.difference(angleDifferenceBetweenEdges(currentEdge, connection)))
+                    .collect(Collectors.toList());
+
+
+            for (Angle angle : endConnectionAngles)
             {
-                endHighestPriorityTag = endConnectionsEdge.highwayTag();
+                if (angle.isLessThan(smallestAngle) && angle.isGreaterThan(Angle.degrees(-5)))
+                {
+                    smallestAngle = angle;
+                    indexOfClosestAngles = endConnectionAngles.indexOf(angle);
+                }
             }
         }
+        Edge endConnection = endConnections.get(indexOfClosestAngles);
 
-        return endHighestPriorityTag;
+//        HighwayTag endHighestPriorityTag = HighwayTag.NO;
+//        for (Edge endConnectionsEdge : endConnections)
+//        {
+//            if(endHighestPriorityTag.isLessImportantThan(endConnectionsEdge.highwayTag()))
+//            {
+//                endHighestPriorityTag = endConnectionsEdge.highwayTag();
+//            }
+//        }
+
+        return endConnection.highwayTag();
+    }
+
+    private Angle angleDifferenceBetweenEdges(Edge edge1, Edge edge2)
+    {
+        Optional<Heading> edge1heading;
+        Optional<Heading> edge2heading;
+
+        edge1heading = edge1.asPolyLine().finalHeading();
+        edge2heading = edge2.asPolyLine().initialHeading();
+
+        if(edge1heading.isPresent() && edge2heading.isPresent())
+        {
+            return edge1heading.get().difference(edge2heading.get());
+        }
+
+        return Angle.NONE;
     }
 }
